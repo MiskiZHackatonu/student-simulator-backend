@@ -17,8 +17,7 @@ let db = new sqlite3.Database('./db/sample.db', sqlite3.OPEN_READWRITE | sqlite3
         // Create users table if it doesn't exist
         db.run(`CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        password TEXT
+        name TEXT
       )`, (err) => {
             if (err) {
                 console.error(err.message);
@@ -33,65 +32,30 @@ const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 
-app.post('/api/data', (req, res) => {
-    console.log(req.body); 
-    res.json(req.body);
-});
+app.post('/api/registerOrLogin', (req, res) => {
+    const { name } = req.body;
 
-app.post('/api/register', async (req, res) => {
-    try {
-        const hashedPassword = await bcrypt.hash(req.body.password, 10);
-        const user = { name: req.body.name, password: hashedPassword };
-
-        // Check if user already exists
-        db.get(`SELECT * FROM users WHERE name = ?`, [user.name], (err, row) => {
-            if (err) {
-                return console.log(err.message);
-            }
-
-            // If the user exists, send a response and return
-            if (row) {
-                res.status(200).send({ error: true, message: 'Username already exists' });
-                return;
-            }
-
-            // If the user does not exist, insert the new user into the users table
-            db.run(`INSERT INTO users(name, password) VALUES(?, ?)`, [user.name, user.password], function (err) {
-                if (err) {
-                    return console.log(err.message);
-                }
-                // get the last insert id
-                console.log(`A row has been inserted with rowid ${this.lastID}`);
-            });
-
-            console.log('User registered successfully');
-            res.status(201).send({ error: false, message: 'User registered successfully' });
-        });
-    } catch {
-        res.status(500).send();
-    }
-});
-
-app.post('/api/login', async (req, res) => {
-    db.get(`SELECT * FROM users WHERE name = ?`, [req.body.name], async (err, row) => {
+    console.log(name);
+    // create user if doesnt exist, else login
+    db.get(`SELECT * FROM users WHERE name = ?`, [name], (err, row) => {
         if (err) {
-            return console.log(err.message);
-        }
-
-        if (row) {
-            try {
-                if (await bcrypt.compare(req.body.password, row.password)) {
-                    console.log('User logged in successfully');
-                    const accessToken = jwt.sign(row, process.env.ACCESS_TOKEN_SECRET);
-                    res.json({ accessToken: accessToken });
-                } else {
-                    res.status(200).send({ error: true, message: 'Username or password is incorrect' });
-                }
-            } catch {
-                res.status(500).send();
-            }
+            console.error(err.message);
+            res.status(500).json({ error: true, message: 'Internal server error' });
         } else {
-            res.send({ error: true, message: 'Username or password is incorrect' });
+            if (row) {
+                // login
+                res.json({ message: 'User logged in successfully' });
+            } else {
+                // register
+                db.run(`INSERT INTO users (name) VALUES (?)`, [name], (err) => {
+                    if (err) {
+                        console.error(err.message);
+                        res.status(500).json({ error: true, message: 'Internal server error' });
+                    } else {
+                        res.json({ message: 'User registered successfully' });
+                    }
+                });
+            }
         }
     });
 });
