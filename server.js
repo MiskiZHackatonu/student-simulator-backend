@@ -198,6 +198,17 @@ app.post('/games/6/solved', async (req, res) => {
     }
 });
 
+app.get('/games/scores', (req, res) => {
+    db.all(`SELECT * FROM games_users_score`, [], (err, rows) => {
+        if (err) {
+            console.error(err.message);
+            res.status(500).send({ error: 'Database error' });
+            return;
+        }
+        res.status(200).send(rows);
+    });
+});
+
 
 app.get('/', (req, res) => {
     res.send('Hello World!');
