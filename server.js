@@ -193,6 +193,7 @@ app.post('/games/6/solved', async (req, res) => {
                 }
             }, 1000); // Check every second
         });
+        res.status(200).send({ message: 'Solved updated successfully' });
     } catch (error) {
         res.status(500).send({ message: error.message });
     }
