@@ -49,33 +49,34 @@ let db = new sqlite3.Database('./db/sample.db', sqlite3.OPEN_READWRITE | sqlite3
     }
 });
 
-async function setScore(req, res, gameId, userId, score) {
-    db.get(`SELECT * FROM games_users_score WHERE game_id = ? AND user_id = ?`, [gameId, userId], (err, row) => {
-        if (err) {
-            console.error(err.message);
-            res.status(500).send({ error: 'Database error' });
-            return;
-        } else if (row) {
-            // If an entry with the same game_id and user_id already exists, update the score
-            db.run(`UPDATE games_users_score SET score = ? WHERE game_id = ? AND user_id = ?`, [score, gameId, userId], (err) => {
-                if (err) {
-                    console.error(err.message);
-                    res.status(500).send({ error: 'Database error' });
-                    return;
-                }
-                res.status(200).send({ message: 'Score updated successfully' });
-            });
-        } else {
-            // If no entry with the same game_id and user_id exists, insert a new entry
-            db.run(`INSERT INTO games_users_score (game_id, user_id, score) VALUES (?, ?, ?)`, [gameId, userId, score], (err) => {
-                if (err) {
-                    console.error(err.message);
-                    res.status(500).send({ error: 'Database error' });
-                    return;
-                }
-                res.status(201).send({ message: 'Score inserted successfully' });
-            });
-        }
+async function setScore(gameId, userId, score) {
+    return new Promise((resolve, reject) => {
+        db.get(`SELECT * FROM games_users_score WHERE game_id = ? AND user_id = ?`, [gameId, userId], (err, row) => {
+            if (err) {
+                console.error(err.message);
+                reject('Database error');
+            } else if (row) {
+                // If an entry with the same game_id and user_id already exists, update the score
+                db.run(`UPDATE games_users_score SET score = ? WHERE game_id = ? AND user_id = ?`, [score, gameId, userId], (err) => {
+                    if (err) {
+                        console.error(err.message);
+                        reject('Database error');
+                    } else {
+                        resolve(true);
+                    }
+                });
+            } else {
+                // If no entry with the same game_id and user_id exists, insert a new entry
+                db.run(`INSERT INTO games_users_score (game_id, user_id, score) VALUES (?, ?, ?)`, [gameId, userId, score], (err) => {
+                    if (err) {
+                        console.error(err.message);
+                        reject('Database error');
+                    } else {
+                        resolve(true);
+                    }
+                });
+            }
+        });
     });
 }
 
@@ -113,22 +114,25 @@ app.post('/api/registerOrLogin', (req, res) => {
 app.post('/games/setScore', (req, res) => {
     const { userId, gameId } = req.body;
 
-    setScore(req, res, gameId, userId, score);
+    let result = setScore(gameId, userId, score);
 
-    res.status(200).send({ message: 'Score updated successfully' });
+    if (result) {
+        res.status(200).send({ message: 'Score updated successfully' });
+    } else {
+        res.status(500).send({ message: 'Error setting score' });
+    }
 });
 
 // Endpoint for matchmaking for game6
 app.post('/games/6/matchmaking', async (req, res) => {
     const { lobbyId, userId } = req.body;
 
-    console.log(games_lobby[lobbyId]);
 
     if (games_lobby[lobbyId] == undefined) {
         games_lobby[lobbyId] = {
             users: [userId],
-            userId: false
         };
+        games_lobby[lobbyId][userId] = false;
 
         // Wait for other user to join
         try {
@@ -146,28 +150,24 @@ app.post('/games/6/matchmaking', async (req, res) => {
                     reject(new Error('Timeout waiting for other user to join'));
                 }, 60000);
             });
-            // delete 
-            delete games_lobby[lobbyId];
             res.status(200).send({ message: 'Matchmaking successful', id: 1 });
         } catch (error) {
             res.status(500).send({ message: error.message });
         }
     } else if (games_lobby[lobbyId].users.length == 1) {
         games_lobby[lobbyId].users.push(userId);
-        games_lobby[lobbyId].userId = false;
+        games_lobby[lobbyId][userId] = false;
         res.status(200).send({ message: 'Matchmaking successful', id: 2 });
     }
     else {
         res.status(400).send({ message: 'Lobby is full' });
     }
-
-    console.log(games_lobby);
 });
 
 app.post('/games/6/solved', async (req, res) => {
     const { lobbyId, userId } = req.body;
 
-    games_lobby[lobbyId].userId = true;
+    games_lobby[lobbyId][userId] = true;
 
     try {
         await new Promise((resolve, reject) => {
@@ -184,16 +184,22 @@ app.post('/games/6/solved', async (req, res) => {
                 if (allSolved) {
                     clearInterval(checkInterval);
                     // Set score for each user in the lobby
-                    setScore(req, res, 6, userId, score);
+                    let result = setScore(req, res, 6, userId, score);
                     // Check if lobby still exists before trying to delete it
                     if (games_lobby[lobbyId]) {
                         delete games_lobby[lobbyId];
+                        console.log('Lobby deleted');
+                        console.log(games_lobby);
+                    }
+                    if (result) {
+                        res.status(200).send({ message: 'Solved updated successfully' });
+                    } else {
+                        res.status(500).send({ message: 'Error setting score' });
                     }
                     resolve();
                 }
             }, 1000); // Check every second
         });
-        res.status(200).send({ message: 'Solved updated successfully' });
     } catch (error) {
         res.status(500).send({ message: error.message });
     }
