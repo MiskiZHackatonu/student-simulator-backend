@@ -122,7 +122,7 @@ app.post('/games/setScore', (req, res) => {
 app.post('/games/6/matchmaking', async (req, res) => {
     const { lobbyId, userId } = req.body;
 
-    console.log(games_lobby);
+    console.log(games_lobby[lobbyId]);
 
     if (games_lobby[lobbyId] == undefined) {
         games_lobby[lobbyId] = {
@@ -148,14 +148,14 @@ app.post('/games/6/matchmaking', async (req, res) => {
             });
             // delete 
             delete games_lobby[lobbyId];
-            res.status(200).send({ message: 'Matchmaking successful' });
+            res.status(200).send({ message: 'Matchmaking successful', id: 1 });
         } catch (error) {
             res.status(500).send({ message: error.message });
         }
     } else if (games_lobby[lobbyId].users.length == 1) {
         games_lobby[lobbyId].users.push(userId);
         games_lobby[lobbyId].userId = false;
-        res.status(200).send({ message: 'Matchmaking successful' });
+        res.status(200).send({ message: 'Matchmaking successful', id: 2 });
     }
     else {
         res.status(400).send({ message: 'Lobby is full' });
